@@ -1,2 +1,2 @@
 # fractionalestatefinals
-A capstone project for business applications blockchain technology class
+A test final project for business applications blockchain technology class
