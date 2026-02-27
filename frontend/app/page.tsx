@@ -236,7 +236,7 @@ export default function HomePage() {
             </div>
           </div>
           <div className="border-t mt-8 pt-8 text-center text-sm text-muted-foreground">
-            <p>&copy; {new Date().getFullYear()} FractionalEstate. Blockchain Class Capstone Project.</p>
+            <p>&copy; {new Date().getFullYear()} FractionalEstate. Blockchain Class Final Project.</p>
           </div>
         </div>
       </footer>
