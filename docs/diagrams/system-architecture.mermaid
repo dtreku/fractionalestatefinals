@@ -1,0 +1,98 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#4F46E5', 'primaryTextColor': '#fff', 'primaryBorderColor': '#4338CA', 'lineColor': '#6366F1', 'secondaryColor': '#818CF8', 'tertiaryColor': '#C7D2FE', 'background': '#F8FAFC'}}}%%
+
+flowchart TB
+    subgraph CLIENT["🖥️ Client Layer"]
+        direction LR
+        BROWSER["Web Browser"]
+        MOBILE["Mobile App"]
+        WALLET["MetaMask / WalletConnect"]
+    end
+
+    subgraph FRONTEND["⚛️ Frontend Layer (Next.js 14)"]
+        direction TB
+        subgraph PAGES["Pages"]
+            HOME["Landing Page"]
+            DASH["Dashboard"]
+            PROPS["Properties"]
+            GOV["Governance"]
+            PROF["Profile"]
+        end
+        subgraph COMPONENTS["Components"]
+            UI["UI Components<br/>(shadcn/ui)"]
+            FORMS["Investment Forms"]
+            CHARTS["Charts & Metrics"]
+        end
+        subgraph STATE["State Management"]
+            WAGMI["wagmi Hooks"]
+            QUERY["React Query"]
+            CONTEXT["React Context"]
+        end
+    end
+
+    subgraph WEB3["🔗 Web3 Layer"]
+        direction LR
+        VIEM["viem<br/>(TypeScript Ethereum)"]
+        RAINBOW["RainbowKit<br/>(Wallet UI)"]
+        PROVIDER["JSON-RPC Provider<br/>(Infura/Alchemy)"]
+    end
+
+    subgraph BLOCKCHAIN["⛓️ Blockchain Layer (Sepolia)"]
+        direction TB
+        subgraph CONTRACTS["Smart Contracts"]
+            FE["FractionalEstate.sol<br/>(ERC-1155)"]
+            GOV_CONTRACT["PropertyGovernance.sol"]
+        end
+        subgraph FEATURES["Contract Features"]
+            TOKENS["Property Tokens"]
+            DIVS["Dividends"]
+            KYC["KYC/AML"]
+            VOTING["Voting"]
+        end
+    end
+
+    subgraph DATABASE["🗄️ Database Layer (Supabase)"]
+        direction TB
+        subgraph TABLES["PostgreSQL Tables"]
+            USERS["users"]
+            PROPERTIES["properties"]
+            INVESTMENTS["investments"]
+            DIVIDENDS["dividends"]
+            PROPOSALS["proposals"]
+            VOTES["votes"]
+        end
+        subgraph SECURITY["Security"]
+            RLS["Row Level Security"]
+            AUTH["Supabase Auth"]
+        end
+    end
+
+    subgraph EXTERNAL["🌐 External Services"]
+        direction LR
+        KYC_API["KYC Provider<br/>(Jumio/Onfido)"]
+        IPFS["IPFS<br/>(Metadata Storage)"]
+        ETHERSCAN["Etherscan<br/>(Block Explorer)"]
+    end
+
+    %% Connections
+    CLIENT --> FRONTEND
+    WALLET --> WEB3
+    FRONTEND --> WEB3
+    FRONTEND --> DATABASE
+    WEB3 --> BLOCKCHAIN
+    BLOCKCHAIN --> EXTERNAL
+    DATABASE --> EXTERNAL
+
+    %% Styling
+    classDef clientClass fill:#E0F2FE,stroke:#0284C7,color:#0369A1
+    classDef frontendClass fill:#DCFCE7,stroke:#16A34A,color:#166534
+    classDef web3Class fill:#FEF3C7,stroke:#D97706,color:#B45309
+    classDef blockchainClass fill:#F3E8FF,stroke:#9333EA,color:#7C3AED
+    classDef databaseClass fill:#FCE7F3,stroke:#DB2777,color:#BE185D
+    classDef externalClass fill:#F1F5F9,stroke:#64748B,color:#475569
+
+    class CLIENT clientClass
+    class FRONTEND frontendClass
+    class WEB3 web3Class
+    class BLOCKCHAIN blockchainClass
+    class DATABASE databaseClass
+    class EXTERNAL externalClass

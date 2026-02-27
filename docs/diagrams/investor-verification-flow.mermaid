@@ -1,0 +1,146 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#DC2626', 'primaryTextColor': '#fff', 'primaryBorderColor': '#B91C1C', 'lineColor': '#EF4444', 'secondaryColor': '#F87171', 'tertiaryColor': '#FECACA'}}}%%
+
+sequenceDiagram
+    autonumber
+    participant Investor
+    participant Frontend as Next.js Frontend
+    participant Wallet as MetaMask Wallet
+    participant KYCProvider as KYC Provider API
+    participant DB as Supabase Database
+    participant Compliance as Compliance Officer
+    participant Contract as FractionalEstate.sol
+    participant Blockchain as Sepolia Network
+
+    Note over Investor, Blockchain: Investor KYC/AML Verification Flow
+
+    %% Registration Phase
+    rect rgb(254, 242, 242)
+        Note right of Investor: Registration Phase
+        Investor->>Frontend: Connect wallet
+        Frontend->>Wallet: Request connection
+        Wallet-->>Investor: Approve connection?
+        Investor->>Wallet: Approve
+        Wallet-->>Frontend: Wallet address
+        
+        Frontend->>Contract: getInvestor(walletAddress)
+        Contract-->>Frontend: Investor record (or empty)
+        
+        alt New Investor
+            Frontend-->>Investor: Display registration form
+        else Existing Investor
+            Frontend-->>Investor: Show verification status
+        end
+    end
+
+    %% KYC Submission
+    rect rgb(254, 249, 195)
+        Note right of Investor: KYC Document Submission
+        Investor->>Frontend: Submit KYC information
+        Note right of Investor: Full name, DOB, Address,<br/>SSN/Tax ID, ID Document,<br/>Proof of Address
+        
+        Frontend->>Frontend: Validate form data
+        Frontend->>DB: Create/update user record
+        Note right of DB: Store: email, full_name,<br/>date_of_birth, address,<br/>verification_status: 'pending'
+        DB-->>Frontend: User record saved
+        
+        Frontend->>KYCProvider: Submit for verification
+        Note right of KYCProvider: Third-party KYC service<br/>(e.g., Jumio, Onfido)
+        KYCProvider-->>Frontend: Verification ID received
+        
+        Frontend->>DB: Store verification_id
+        Frontend-->>Investor: ✅ Documents submitted<br/>Review in progress (24-48 hrs)
+    end
+
+    %% KYC Processing
+    rect rgb(243, 244, 246)
+        Note right of KYCProvider: Background Verification
+        KYCProvider->>KYCProvider: Identity verification
+        KYCProvider->>KYCProvider: Document authenticity check
+        KYCProvider->>KYCProvider: AML/Sanctions screening
+        KYCProvider->>KYCProvider: PEP (Politically Exposed Person) check
+        
+        alt Verification Failed
+            KYCProvider->>Frontend: Webhook: FAILED
+            Frontend->>DB: Update status: 'rejected'
+            Frontend->>DB: Store rejection reason
+            DB-->>Frontend: Status updated
+            Frontend-->>Investor: ❌ Verification failed<br/>Reason: [details]
+            Note over Investor: May resubmit with corrections
+        else Verification Passed
+            KYCProvider->>Frontend: Webhook: PASSED
+            Frontend->>DB: Update status: 'verified'
+            DB-->>Frontend: Status updated
+        end
+    end
+
+    %% Accreditation Check (Optional)
+    rect rgb(239, 246, 255)
+        Note right of Investor: Accreditation Verification (Optional)
+        Note over Investor: Required for certain<br/>high-value properties
+        
+        Investor->>Frontend: Submit accreditation proof
+        Note right of Investor: Income verification,<br/>Net worth statement,<br/>Professional certification
+        
+        Frontend->>Compliance: Review accreditation docs
+        Compliance->>Compliance: Verify income/assets
+        Compliance->>Compliance: Check professional credentials
+        
+        alt Accredited
+            Compliance->>DB: Set is_accredited: true
+            DB-->>Frontend: Updated
+        else Not Accredited
+            Compliance->>DB: Set is_accredited: false
+            Note over Investor: Limited to non-accredited<br/>investment opportunities
+        end
+    end
+
+    %% On-Chain Verification
+    rect rgb(220, 252, 231)
+        Note right of Compliance: On-Chain Verification Recording
+        Compliance->>Frontend: Approve investor on-chain
+        Frontend->>Wallet: Request compliance signature
+        Compliance->>Wallet: Sign transaction
+        
+        Wallet->>Contract: verifyInvestor(investorAddress, isAccredited)
+        Contract->>Contract: Validate caller has COMPLIANCE_ROLE
+        Contract->>Contract: Set investor.isVerified = true
+        Contract->>Contract: Set investor.isAccredited = flag
+        Contract->>Contract: Record verificationTimestamp
+        
+        Contract->>Blockchain: Emit InvestorVerified event
+        Contract-->>Wallet: Transaction receipt
+        
+        Frontend->>DB: Sync on-chain status
+        DB-->>Frontend: Updated
+    end
+
+    %% Confirmation
+    rect rgb(245, 243, 255)
+        Note right of Investor: Verification Complete
+        Frontend-->>Investor: 🎉 Verification complete!
+        Note over Investor: Can now purchase<br/>property shares
+        
+        alt Is Accredited
+            Frontend-->>Investor: ✅ Accredited investor<br/>Access to all properties
+        else Not Accredited
+            Frontend-->>Investor: ✅ Verified investor<br/>Access to Reg CF properties
+        end
+    end
+
+    %% Ongoing Monitoring
+    rect rgb(254, 242, 242)
+        Note right of Compliance: Ongoing Compliance
+        loop Periodic Re-verification
+            Compliance->>KYCProvider: AML screening refresh
+            KYCProvider-->>Compliance: Updated status
+            
+            alt Sanctions Match Found
+                Compliance->>Contract: revokeInvestor(address)
+                Contract->>Contract: Set isVerified = false
+                Contract-->>Compliance: Investor frozen
+                Note over Investor: Cannot transfer/purchase shares
+            end
+        end
+    end
+
+    Note over Investor, Blockchain: Investor verified - Ready for fractional property investment

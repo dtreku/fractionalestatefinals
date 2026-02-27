@@ -1,0 +1,80 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#4F46E5', 'primaryTextColor': '#fff', 'primaryBorderColor': '#4338CA', 'lineColor': '#6366F1', 'secondaryColor': '#818CF8', 'tertiaryColor': '#C7D2FE'}}}%%
+
+sequenceDiagram
+    autonumber
+    participant Investor
+    participant Frontend as Next.js Frontend
+    participant Wallet as MetaMask Wallet
+    participant Contract as FractionalEstate.sol
+    participant Blockchain as Sepolia Network
+    participant DB as Supabase Database
+    participant Treasury as Platform Treasury
+
+    Note over Investor, Treasury: Property Share Purchase Flow
+
+    %% Discovery Phase
+    rect rgb(240, 249, 255)
+        Note right of Investor: Discovery Phase
+        Investor->>Frontend: Browse properties
+        Frontend->>DB: Query available properties
+        DB-->>Frontend: Return property listings
+        Frontend-->>Investor: Display properties with yields & availability
+    end
+
+    %% Selection Phase
+    rect rgb(254, 249, 195)
+        Note right of Investor: Selection Phase
+        Investor->>Frontend: Select property & share quantity
+        Frontend->>Contract: getProperty(propertyId)
+        Contract-->>Frontend: Property details (price, available shares)
+        Frontend->>Contract: getInvestor(walletAddress)
+        Contract-->>Frontend: Investor verification status
+        
+        alt Investor Not Verified
+            Frontend-->>Investor: ❌ KYC verification required
+            Note over Investor: Must complete verification first
+        else Investor Verified
+            Frontend-->>Investor: ✅ Display purchase form
+        end
+    end
+
+    %% Purchase Transaction
+    rect rgb(220, 252, 231)
+        Note right of Investor: Purchase Transaction
+        Investor->>Frontend: Confirm purchase (X shares)
+        Frontend->>Frontend: Calculate total cost<br/>(shares × price + 2.5% fee)
+        Frontend->>Wallet: Request transaction signature
+        Wallet-->>Investor: Display transaction details
+        Investor->>Wallet: Approve & sign transaction
+        
+        Wallet->>Contract: purchaseShares(propertyId, quantity) + ETH value
+        
+        Contract->>Contract: Validate investor verified
+        Contract->>Contract: Validate shares available
+        Contract->>Contract: Validate payment sufficient
+        Contract->>Contract: Calculate platform fee (2.5%)
+        
+        Contract->>Treasury: Transfer platform fee
+        Contract->>Contract: Update property.fundedAmount
+        Contract->>Contract: Update property.availableShares
+        Contract->>Contract: Mint ERC-1155 tokens to investor
+        
+        Contract->>Blockchain: Emit SharesPurchased event
+        Contract-->>Wallet: Transaction receipt
+    end
+
+    %% Confirmation & Sync
+    rect rgb(243, 232, 255)
+        Note right of Investor: Confirmation & Database Sync
+        Wallet-->>Frontend: Transaction confirmed
+        Frontend->>DB: Insert investment record
+        Note right of DB: Store: tx_hash, block_number,<br/>shares, price, fee, status
+        DB-->>Frontend: Investment saved
+        
+        Frontend->>Contract: balanceOf(investor, propertyId)
+        Contract-->>Frontend: Updated share balance
+        
+        Frontend-->>Investor: 🎉 Purchase successful!<br/>Display shares owned & tx link
+    end
+
+    Note over Investor, Treasury: Investor now holds ERC-1155 tokens representing property shares

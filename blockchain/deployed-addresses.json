@@ -1,0 +1,13 @@
+{
+  "network": "development",
+  "deployedAt": "2026-02-27T05:15:14.913Z",
+  "contracts": {
+    "FractionalEstate": "0x22e2C748e23e9d571F05B66ad4b4dF32BDC30EF5",
+    "PropertyGovernance": "0xBE0FBB857e3aD8A975ABD721A16449b19b7997F0"
+  },
+  "config": {
+    "treasury": "0xb3afdA870f9f1ddd3ae16f287AB3842C5f9FA109",
+    "minimumInvestment": "1000000000000000",
+    "metadataURI": "https://ipfs.io/ipfs/YOUR_METADATA_CID/{id}.json"
+  }
+}

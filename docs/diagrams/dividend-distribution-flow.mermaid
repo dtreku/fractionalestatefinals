@@ -1,0 +1,107 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#059669', 'primaryTextColor': '#fff', 'primaryBorderColor': '#047857', 'lineColor': '#10B981', 'secondaryColor': '#34D399', 'tertiaryColor': '#A7F3D0'}}}%%
+
+sequenceDiagram
+    autonumber
+    participant Manager as Property Manager
+    participant Frontend as Next.js Frontend
+    participant Wallet as MetaMask Wallet
+    participant Contract as FractionalEstate.sol
+    participant Blockchain as Sepolia Network
+    participant DB as Supabase Database
+    participant Investors as Token Holders
+
+    Note over Manager, Investors: Dividend Declaration & Distribution Flow
+
+    %% Income Collection Phase
+    rect rgb(240, 253, 244)
+        Note right of Manager: Income Collection Phase
+        Note over Manager: Rental income collected<br/>from property tenants
+        Manager->>Frontend: Access dividend management
+        Frontend->>Contract: Check PROPERTY_MANAGER_ROLE
+        Contract-->>Frontend: Role verified ✅
+        Frontend-->>Manager: Display dividend declaration form
+    end
+
+    %% Dividend Declaration
+    rect rgb(254, 252, 232)
+        Note right of Manager: Dividend Declaration
+        Manager->>Frontend: Enter dividend amount (ETH)
+        Frontend->>Contract: getProperty(propertyId)
+        Contract-->>Frontend: totalShares, fundedAmount
+        Frontend->>Frontend: Calculate per-share dividend
+        Frontend-->>Manager: Preview: X ETH per share
+        
+        Manager->>Frontend: Confirm declaration
+        Frontend->>Wallet: Request signature + ETH value
+        Wallet-->>Manager: Display transaction details
+        Manager->>Wallet: Approve & sign
+        
+        Wallet->>Contract: declareDividend(propertyId) + ETH value
+        Contract->>Contract: Validate caller has PROPERTY_MANAGER_ROLE
+        Contract->>Contract: Validate property is active
+        Contract->>Contract: Calculate amountPerShare
+        Contract->>Contract: Store dividend record with timestamp
+        Contract->>Contract: Set claim deadline (30 days)
+        
+        Contract->>Blockchain: Emit DividendDeclared event
+        Contract-->>Wallet: Transaction receipt
+    end
+
+    %% Database Sync
+    rect rgb(239, 246, 255)
+        Note right of Manager: Database Synchronization
+        Frontend->>DB: Insert dividend record
+        Note right of DB: Store: chain_dividend_index,<br/>total_amount, per_share_amount,<br/>claim_deadline
+        DB-->>Frontend: Dividend saved
+        
+        Frontend->>DB: Create notifications for all investors
+        Note right of DB: notification_type: 'dividend'
+        DB-->>Frontend: Notifications created
+        
+        Frontend-->>Manager: ✅ Dividend declared successfully
+    end
+
+    %% Investor Notification
+    rect rgb(254, 242, 242)
+        Note right of Investors: Investor Notification
+        DB->>Investors: Email/Push notification
+        Note over Investors: "New dividend available!<br/>Claim before deadline"
+    end
+
+    %% Claim Phase
+    rect rgb(243, 232, 255)
+        Note right of Investors: Dividend Claim Phase
+        Investors->>Frontend: View claimable dividends
+        Frontend->>Contract: getClaimableDividends(investor, propertyId)
+        Contract-->>Frontend: Claimable amount in ETH
+        Frontend-->>Investors: Display: X ETH claimable
+        
+        Investors->>Frontend: Click "Claim Dividends"
+        Frontend->>Wallet: Request transaction signature
+        Investors->>Wallet: Approve & sign
+        
+        Wallet->>Contract: claimDividends(propertyId, dividendIndices[])
+        
+        loop For each dividend index
+            Contract->>Contract: Verify not already claimed
+            Contract->>Contract: Verify within deadline
+            Contract->>Contract: Calculate amount based on share snapshot
+            Contract->>Contract: Mark as claimed
+        end
+        
+        Contract->>Investors: Transfer total ETH amount
+        Contract->>Blockchain: Emit DividendsClaimed event
+        Contract-->>Wallet: Transaction receipt
+    end
+
+    %% Final Confirmation
+    rect rgb(240, 253, 244)
+        Note right of Investors: Confirmation
+        Wallet-->>Frontend: Transaction confirmed
+        Frontend->>DB: Update dividend_claims record
+        Note right of DB: Store: claim_tx_hash,<br/>amount_claimed, claimed_at
+        DB-->>Frontend: Claim recorded
+        Frontend-->>Investors: 🎉 Dividends claimed!<br/>ETH transferred to wallet
+    end
+
+    Note over Manager, Investors: Dividend cycle complete - Investors receive passive income

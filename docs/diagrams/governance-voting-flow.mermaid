@@ -1,0 +1,144 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#7C3AED', 'primaryTextColor': '#fff', 'primaryBorderColor': '#6D28D9', 'lineColor': '#8B5CF6', 'secondaryColor': '#A78BFA', 'tertiaryColor': '#DDD6FE'}}}%%
+
+sequenceDiagram
+    autonumber
+    participant Proposer as Share Holder (Proposer)
+    participant Voters as Token Holders
+    participant Frontend as Next.js Frontend
+    participant Wallet as MetaMask Wallet
+    participant GovContract as PropertyGovernance.sol
+    participant PropContract as FractionalEstate.sol
+    participant Blockchain as Sepolia Network
+    participant DB as Supabase Database
+
+    Note over Proposer, DB: Property Governance Voting Flow
+
+    %% Proposal Creation Phase
+    rect rgb(245, 243, 255)
+        Note right of Proposer: Proposal Creation Phase
+        Proposer->>Frontend: Navigate to governance
+        Frontend->>PropContract: balanceOf(proposer, propertyId)
+        PropContract-->>Frontend: Share balance
+        
+        alt No shares owned
+            Frontend-->>Proposer: ❌ Must own shares to propose
+        else Owns shares
+            Frontend-->>Proposer: ✅ Display proposal form
+        end
+        
+        Proposer->>Frontend: Create proposal
+        Note right of Proposer: Title, Description,<br/>Proposal Type, Property ID
+        
+        Frontend->>Wallet: Request signature
+        Proposer->>Wallet: Approve & sign
+        
+        Wallet->>GovContract: createProposal(propertyId, type, title, description, executionData)
+        GovContract->>PropContract: Check proposer owns shares
+        PropContract-->>GovContract: ✅ Verified
+        GovContract->>GovContract: Create proposal record
+        GovContract->>GovContract: Set voting start (now + 1 day)
+        GovContract->>GovContract: Set voting end (start + 7 days)
+        GovContract->>GovContract: Set state = PENDING
+        
+        GovContract->>Blockchain: Emit ProposalCreated event
+        GovContract-->>Wallet: Proposal ID + receipt
+    end
+
+    %% Database Sync
+    rect rgb(254, 249, 195)
+        Note right of Frontend: Database Synchronization
+        Wallet-->>Frontend: Transaction confirmed
+        Frontend->>DB: Insert proposal record
+        Note right of DB: Store: chain_proposal_id, type,<br/>title, description, voting_start,<br/>voting_end, proposer
+        DB-->>Frontend: Proposal saved
+        
+        Frontend->>DB: Notify all property shareholders
+        DB-->>Frontend: Notifications queued
+        Frontend-->>Proposer: ✅ Proposal created!
+    end
+
+    %% Waiting Period
+    rect rgb(243, 244, 246)
+        Note over GovContract: ⏳ 1-Day Pending Period
+        Note right of GovContract: Allows review before voting begins
+    end
+
+    %% Voting Phase
+    rect rgb(220, 252, 231)
+        Note right of Voters: Voting Phase (7 Days)
+        
+        loop For each voter
+            Voters->>Frontend: View active proposals
+            Frontend->>GovContract: getProposal(proposalId)
+            GovContract-->>Frontend: Proposal details + state
+            Frontend->>PropContract: balanceOf(voter, propertyId)
+            PropContract-->>Frontend: Voting power (shares owned)
+            Frontend-->>Voters: Display proposal + voting power
+            
+            Voters->>Frontend: Cast vote (For/Against/Abstain)
+            Frontend->>Wallet: Request signature
+            Voters->>Wallet: Approve & sign
+            
+            Wallet->>GovContract: castVote(proposalId, support, reason)
+            GovContract->>GovContract: Validate state = ACTIVE
+            GovContract->>GovContract: Validate not already voted
+            GovContract->>PropContract: Get voter's share balance
+            PropContract-->>GovContract: Voting power
+            GovContract->>GovContract: Record vote with power
+            GovContract->>GovContract: Update vote tallies
+            
+            GovContract->>Blockchain: Emit VoteCast event
+            GovContract-->>Wallet: Vote recorded
+            
+            Wallet-->>Frontend: Transaction confirmed
+            Frontend->>DB: Insert vote record
+            DB-->>Frontend: Vote saved
+        end
+    end
+
+    %% Vote Tallying
+    rect rgb(254, 242, 242)
+        Note right of GovContract: Vote Tallying
+        Note over GovContract: ⏳ Voting Period Ends
+        
+        Frontend->>GovContract: getProposal(proposalId)
+        GovContract->>GovContract: Calculate results
+        Note right of GovContract: forVotes + againstVotes + abstainVotes<br/>= totalVotes
+        Note right of GovContract: Check quorum (25% of total shares)
+        Note right of GovContract: Check approval (>50% for votes)
+        
+        alt Quorum not met OR Approval < 50%
+            GovContract->>GovContract: state = DEFEATED
+            GovContract-->>Frontend: Proposal defeated
+        else Quorum met AND Approval ≥ 50%
+            GovContract->>GovContract: state = SUCCEEDED
+            GovContract-->>Frontend: Proposal succeeded
+        end
+    end
+
+    %% Execution Phase
+    rect rgb(239, 246, 255)
+        Note right of Proposer: Execution Phase
+        Note over GovContract: ⏳ 2-Day Timelock
+        
+        alt Proposal Succeeded
+            Proposer->>Frontend: Queue proposal for execution
+            Frontend->>Wallet: Request signature
+            Proposer->>Wallet: Approve & sign
+            Wallet->>GovContract: executeProposal(proposalId)
+            
+            GovContract->>GovContract: Validate state = SUCCEEDED
+            GovContract->>GovContract: Validate timelock passed
+            GovContract->>GovContract: Execute on-chain action
+            GovContract->>GovContract: state = EXECUTED
+            
+            GovContract->>Blockchain: Emit ProposalExecuted event
+            GovContract-->>Wallet: Execution complete
+            
+            Frontend->>DB: Update proposal status
+            DB-->>Frontend: Status updated
+            Frontend-->>Proposer: ✅ Proposal executed!
+        end
+    end
+
+    Note over Proposer, DB: Governance cycle complete - Democratic property management achieved
