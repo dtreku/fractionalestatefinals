@@ -1303,9 +1303,10 @@ npx tsc --noEmit
 
 ### Step 4.6: Update Files in your project
 
+
 ### Update the contracts.ts frontend/lib/contracts.ts
-### Copy/Move/Update the supabase.ts file in the frontend/lib with the script provided.
-### Copy/Move/Update the utils.ts file in the frontend/lib/utils.ts with the script provided.
+### Update the supabase.ts frontend/libsupabase.ts  
+### Update the utils.ts file in the frontend/lib/utils.ts.
 ### Update the frontend/tsconfig.json file in the frontend/lib with the script provided.
 ### Update frontend/components/Investment/InvestmentForm
 ### Update the frontend/hooks/use-fractionalestate.ts 
@@ -1327,7 +1328,10 @@ npx tsc --noEmit
 
 
 git add .
+git commit -m "Update files directions in readme"
 git push -u origin main
+
+---
 
 ---
 ---------------------------------------------------------------------------------------------------------------------------------
