@@ -1,111 +1,152 @@
+// frontend/app/properties/[id]/page.tsx
+// ============================================================================
+// PROPERTY DETAIL PAGE
+// Shows property details, investment form, financials, documents, and governance
+// ============================================================================
+
 'use client';
 
-import { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { useAccount } from 'wagmi';
+import { getPropertyById, getUserByWallet, getUserHoldings } from '@/lib/database';
+import { formatCurrency, formatNumber } from '@/lib/contracts';
+import { Property, InvestorHolding } from '@/lib/supabase';
+import InvestmentForm from '@/components/investment/InvestmentForm';
+import GovernanceProposals from '@/components/governance/GovernanceProposals';
+import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { formatEther, formatUSD, formatPercent, formatAddress } from '@/lib/utils';
-import { 
-  ArrowLeft, 
-  MapPin, 
-  Building2, 
-  TrendingUp, 
-  Users, 
-  Clock, 
-  FileText, 
-  Vote, 
+import {
+  ArrowLeft,
+  MapPin,
+  Building2,
+  TrendingUp,
+  Users,
+  Clock,
+  FileText,
+  Vote,
   DollarSign,
   Shield,
-  Calendar,
   Wallet,
   ExternalLink,
   ChevronRight,
-  Info,
   CheckCircle2,
-  AlertCircle
+  Home,
+  Calendar,
+  Percent,
+  Coins
 } from 'lucide-react';
 
-// Mock property data - in production this would come from contract/database
-const MOCK_PROPERTY = {
-  id: '1',
-  name: 'Sunset Boulevard Luxury Apartments',
-  description: 'A premier 24-unit luxury apartment complex located in the heart of Los Angeles. This Class A property features modern amenities, underground parking, rooftop terrace, and has maintained 98% occupancy over the past 3 years. The property generates consistent rental income with long-term leases from high-quality tenants.',
-  type: 'Residential',
-  location: {
-    address: '8500 Sunset Boulevard',
-    city: 'Los Angeles',
-    state: 'CA',
-    zipCode: '90069',
-    country: 'USA',
-    lat: 34.0928,
-    lng: -118.3695
-  },
-  details: {
-    sqft: 32000,
-    bedrooms: 48,
-    bathrooms: 48,
-    yearBuilt: 2019,
-    units: 24,
-    parkingSpaces: 36,
-    amenities: ['Pool', 'Gym', 'Rooftop Terrace', 'Concierge', 'Underground Parking', 'EV Charging']
-  },
-  financials: {
-    totalValue: 12500000,
-    totalShares: 10000,
-    pricePerShare: 1250,
-    sharesAvailable: 3500,
-    fundingProgress: 65,
-    annualYield: 8.2,
-    monthlyRent: 85000,
-    occupancyRate: 98,
-    capRate: 5.8,
-    platformFee: 2.5
-  },
-  timeline: {
-    listingDate: '2024-01-15',
-    fundingDeadline: '2024-06-15',
-    firstDividend: '2024-07-01'
-  },
-  documents: [
-    { name: 'Property Prospectus', type: 'PDF', size: '2.4 MB', url: '#' },
-    { name: 'Financial Statements', type: 'PDF', size: '1.8 MB', url: '#' },
-    { name: 'Inspection Report', type: 'PDF', size: '3.2 MB', url: '#' },
-    { name: 'Title & Deed', type: 'PDF', size: '0.9 MB', url: '#' },
-    { name: 'Insurance Certificate', type: 'PDF', size: '0.5 MB', url: '#' }
-  ],
-  gallery: [
-    '/images/property-1.jpg',
-    '/images/property-2.jpg',
-    '/images/property-3.jpg',
-    '/images/property-4.jpg'
-  ],
-  recentProposals: [
-    { id: '1', title: 'Q2 Dividend Distribution', status: 'Active', votes: { for: 65, against: 12 } },
-    { id: '2', title: 'Rooftop Solar Installation', status: 'Succeeded', votes: { for: 78, against: 8 } }
-  ],
-  investorCount: 156,
-  contractAddress: '0x1234...5678'
-};
+// ============================================================================
+// PAGE COMPONENT
+// ============================================================================
 
 export default function PropertyDetailPage() {
+  // Get property ID from URL
   const params = useParams();
+  const propertyId = params?.id as string;
   const { toast } = useToast();
+
+  // State
+  const [property, setProperty] = useState<Property | null>(null);
+  const [userHolding, setUserHolding] = useState<InvestorHolding | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'overview' | 'financials' | 'documents' | 'governance'>('overview');
   const [sharesToBuy, setSharesToBuy] = useState('');
   const [isInvesting, setIsInvesting] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'financials' | 'documents' | 'governance'>('overview');
 
-  const property = MOCK_PROPERTY;
+  // Wagmi
+  const { address, isConnected } = useAccount();
+
+  // Platform fee percentage
+  const PLATFORM_FEE_PERCENT = 2.5;
+
+  // ============================================================================
+  // DATA LOADING
+  // ============================================================================
+
+  useEffect(() => {
+    if (propertyId) {
+      loadProperty();
+    }
+  }, [propertyId]);
+
+  useEffect(() => {
+    if (address && property) {
+      loadUserHolding();
+    }
+  }, [address, property]);
+
+  useEffect(() => {
+    async function testConnection() {
+      const { data, error } = await supabase.from('properties').select('*').limit(1);
+      if (error) {
+        console.error('Supabase connection failed:', error.message);
+      } else {
+        console.log('Supabase connected! Data:', data);
+      }
+    }
+    testConnection();
+  }, []);
+
+  const loadProperty = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const propertyData = await getPropertyById(propertyId);
+      if (!propertyData) {
+        setError('Property not found');
+        return;
+      }
+      setProperty(propertyData);
+    } catch (err) {
+      console.error('Failed to load property:', err);
+      setError('Failed to load property');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadUserHolding = async () => {
+    if (!address || !property) return;
+
+    try {
+      const user = await getUserByWallet(address);
+      if (user) {
+        const holdings = await getUserHoldings(user.id);
+        const holding = holdings.find((h: InvestorHolding) => h.property_id === property.id);
+        setUserHolding(holding || null);
+      }
+    } catch (err) {
+      console.error('Failed to load user holding:', err);
+    }
+  };
+
+  const handleInvestmentSuccess = () => {
+    loadProperty();
+    loadUserHolding();
+  };
+
+  // ============================================================================
+  // INVESTMENT CALCULATIONS
+  // ============================================================================
+
   const shareAmount = parseInt(sharesToBuy) || 0;
-  const totalCost = shareAmount * property.financials.pricePerShare;
-  const platformFee = totalCost * (property.financials.platformFee / 100);
+  const pricePerShare = property?.token_price || 0;
+  const totalCost = shareAmount * pricePerShare;
+  const platformFee = totalCost * (PLATFORM_FEE_PERCENT / 100);
   const totalWithFee = totalCost + platformFee;
+  const sharesAvailable = property?.tokens_available || 0;
 
-  const handleInvest = async () => {
+  const handleQuickInvest = async () => {
     if (shareAmount <= 0) {
       toast({
         title: 'Invalid amount',
@@ -115,10 +156,10 @@ export default function PropertyDetailPage() {
       return;
     }
 
-    if (shareAmount > property.financials.sharesAvailable) {
+    if (shareAmount > sharesAvailable) {
       toast({
         title: 'Insufficient shares',
-        description: `Only ${property.financials.sharesAvailable} shares available`,
+        description: `Only ${sharesAvailable} shares available`,
         variant: 'destructive'
       });
       return;
@@ -126,26 +167,92 @@ export default function PropertyDetailPage() {
 
     setIsInvesting(true);
     
-    // Simulate transaction
+    // Simulate transaction - replace with actual contract call
     await new Promise(resolve => setTimeout(resolve, 2000));
     
     toast({
       title: 'Investment successful!',
-      description: `You purchased ${shareAmount} shares for ${formatUSD(totalWithFee)}`
+      description: `You purchased ${shareAmount} shares for ${formatCurrency(totalWithFee)}`
     });
     
     setIsInvesting(false);
     setSharesToBuy('');
+    handleInvestmentSuccess();
   };
 
+  // ============================================================================
+  // RENDER HELPERS
+  // ============================================================================
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
+        <div className="container mx-auto px-4 py-8">
+          <div className="animate-pulse space-y-6">
+            <div className="h-8 bg-gray-200 rounded w-32"></div>
+            <div className="h-64 bg-gray-200 rounded-xl"></div>
+            <div className="h-8 bg-gray-200 rounded w-1/3"></div>
+            <div className="grid md:grid-cols-3 gap-8">
+              <div className="md:col-span-2 h-96 bg-gray-200 rounded-xl"></div>
+              <div className="h-96 bg-gray-200 rounded-xl"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !property) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
+        <div className="container mx-auto px-4 py-8">
+          <Link 
+            href="/properties" 
+            className="inline-flex items-center text-gray-600 hover:text-gray-900 mb-8"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Properties
+          </Link>
+          <Card className="text-center py-12">
+            <CardContent>
+              <Building2 className="h-12 w-12 mx-auto text-red-400 mb-4" />
+              <h2 className="text-xl font-semibold text-gray-900 mb-2">Error</h2>
+              <p className="text-gray-600">{error || 'Property not found'}</p>
+              <Link href="/properties">
+                <Button className="mt-4">Browse Properties</Button>
+              </Link>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  // Calculate metrics
+  const soldPercentage = property.total_tokens && property.tokens_available
+    ? ((property.total_tokens - property.tokens_available) / property.total_tokens) * 100
+    : 0;
+
+  const annualYield = property.cap_rate || 8.0;
+  const investorCount = 156; // This would come from your database
+
+  // Mock documents - in production, fetch from database
+  const documents = [
+    { name: 'Property Prospectus', type: 'PDF', size: '2.4 MB', url: '#' },
+    { name: 'Financial Statements', type: 'PDF', size: '1.8 MB', url: '#' },
+    { name: 'Inspection Report', type: 'PDF', size: '3.2 MB', url: '#' },
+    { name: 'Title & Deed', type: 'PDF', size: '0.9 MB', url: '#' },
+    { name: 'Insurance Certificate', type: 'PDF', size: '0.5 MB', url: '#' }
+  ];
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800">
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
       {/* Header */}
-      <div className="border-b border-slate-700">
+      <div className="border-b bg-white">
         <div className="container mx-auto px-4 py-4">
           <Link 
             href="/properties" 
-            className="inline-flex items-center text-slate-400 hover:text-white transition-colors"
+            className="inline-flex items-center text-gray-600 hover:text-gray-900 transition-colors"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back to Properties
@@ -154,54 +261,73 @@ export default function PropertyDetailPage() {
       </div>
 
       {/* Hero Section */}
-      <div className="relative h-64 md:h-80 bg-slate-700">
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-900 to-transparent" />
-        <div className="absolute bottom-0 left-0 right-0 p-6">
+      <div className="relative h-64 md:h-80 bg-gradient-to-r from-blue-600 to-purple-600">
+        <div className="absolute inset-0 bg-black/20" />
+        <div className="absolute inset-0 flex items-center justify-center">
+          <Building2 className="w-20 h-20 text-white/30" />
+        </div>
+        <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/60 to-transparent">
           <div className="container mx-auto">
-            <div className="flex items-start justify-between">
+            <div className="flex flex-wrap items-end justify-between gap-4">
               <div>
                 <div className="flex items-center gap-2 mb-2">
-                  <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
-                    {property.type}
+                  <Badge className={`${
+                    property.status === 'active' 
+                      ? 'bg-green-500/90 hover:bg-green-500'
+                      : property.status === 'offering'
+                      ? 'bg-blue-500/90 hover:bg-blue-500'
+                      : 'bg-gray-500/90 hover:bg-gray-500'
+                  } text-white border-0`}>
+                    {property.status?.toUpperCase() || 'ACTIVE'}
                   </Badge>
-                  <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30">
-                    Funding Open
+                  <Badge variant="secondary" className="bg-white/20 text-white border-0">
+                    {property.property_type || 'Residential'}
                   </Badge>
                 </div>
-                <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">
+                <h1 className="text-2xl md:text-3xl font-bold text-white mb-1">
                   {property.name}
                 </h1>
-                <div className="flex items-center text-slate-300">
+                <div className="flex items-center text-white/90">
                   <MapPin className="w-4 h-4 mr-1" />
-                  {property.location.address}, {property.location.city}, {property.location.state}
+                  {property.street_address && `${property.street_address}, `}
+                  {property.city}, {property.state}
                 </div>
               </div>
-              <div className="hidden md:block text-right">
-                <p className="text-slate-400 text-sm">Property Value</p>
-                <p className="text-2xl font-bold text-white">{formatUSD(property.financials.totalValue)}</p>
+              <div className="text-right">
+                <p className="text-white/80 text-sm">Total Valuation</p>
+                <p className="text-2xl md:text-3xl font-bold text-white">
+                  {formatCurrency(property.total_valuation)}
+                </p>
               </div>
             </div>
           </div>
         </div>
       </div>
 
+      {/* Main Content */}
       <div className="container mx-auto px-4 py-8">
         <div className="grid lg:grid-cols-3 gap-8">
-          {/* Main Content */}
+          {/* Left Column - Tabs and Content */}
           <div className="lg:col-span-2 space-y-6">
             {/* Tab Navigation */}
-            <div className="flex gap-2 border-b border-slate-700 pb-2">
-              {(['overview', 'financials', 'documents', 'governance'] as const).map((tab) => (
+            <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
+              {([
+                { key: 'overview', label: 'Overview', icon: Home },
+                { key: 'financials', label: 'Financials', icon: TrendingUp },
+                { key: 'documents', label: 'Documents', icon: FileText },
+                { key: 'governance', label: 'Governance', icon: Vote },
+              ] as const).map((tab) => (
                 <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`px-4 py-2 rounded-t-lg font-medium transition-colors ${
-                    activeTab === tab
-                      ? 'bg-slate-700 text-white'
-                      : 'text-slate-400 hover:text-white'
+                  key={tab.key}
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-md font-medium transition-all ${
+                    activeTab === tab.key
+                      ? 'bg-white text-blue-600 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
                   }`}
                 >
-                  {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                  <tab.icon className="w-4 h-4" />
+                  <span className="hidden sm:inline">{tab.label}</span>
                 </button>
               ))}
             </div>
@@ -209,75 +335,123 @@ export default function PropertyDetailPage() {
             {/* Overview Tab */}
             {activeTab === 'overview' && (
               <div className="space-y-6">
-                <Card className="bg-slate-800 border-slate-700">
+                {/* Key Metrics Cards */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <Card>
+                    <CardContent className="pt-6 text-center">
+                      <Coins className="w-8 h-8 text-blue-600 mx-auto mb-2" />
+                      <p className="text-2xl font-bold">{formatCurrency(property.token_price || 0)}</p>
+                      <p className="text-sm text-gray-500">Per Share</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="pt-6 text-center">
+                      <TrendingUp className="w-8 h-8 text-green-600 mx-auto mb-2" />
+                      <p className="text-2xl font-bold text-green-600">{annualYield}%</p>
+                      <p className="text-sm text-gray-500">Est. Annual Yield</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="pt-6 text-center">
+                      <Users className="w-8 h-8 text-purple-600 mx-auto mb-2" />
+                      <p className="text-2xl font-bold">{investorCount}</p>
+                      <p className="text-sm text-gray-500">Investors</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="pt-6 text-center">
+                      <Percent className="w-8 h-8 text-orange-600 mx-auto mb-2" />
+                      <p className="text-2xl font-bold">{property.occupancy_rate || 98}%</p>
+                      <p className="text-sm text-gray-500">Occupancy</p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Property Description */}
+                <Card>
                   <CardHeader>
-                    <CardTitle className="text-white">Property Description</CardTitle>
+                    <CardTitle>Property Description</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-slate-300 leading-relaxed">{property.description}</p>
+                    <p className="text-gray-600 leading-relaxed">
+                      {property.description || 'A premium investment opportunity in a high-demand location. This property offers stable returns through rental income and potential appreciation. Professional management ensures hassle-free ownership for all investors.'}
+                    </p>
                   </CardContent>
                 </Card>
 
-                <Card className="bg-slate-800 border-slate-700">
+                {/* Property Details */}
+                <Card>
                   <CardHeader>
-                    <CardTitle className="text-white">Property Details</CardTitle>
+                    <CardTitle>Property Details</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                      <div className="p-3 bg-slate-700/50 rounded-lg">
-                        <p className="text-slate-400 text-sm">Square Footage</p>
-                        <p className="text-white font-semibold">{property.details.sqft.toLocaleString()} sq ft</p>
+                      {property.square_feet && (
+                        <div className="p-3 bg-gray-50 rounded-lg">
+                          <p className="text-gray-500 text-sm">Square Footage</p>
+                          <p className="font-semibold">{formatNumber(property.square_feet)} sq ft</p>
+                        </div>
+                      )}
+                      {property.bedrooms && (
+                        <div className="p-3 bg-gray-50 rounded-lg">
+                          <p className="text-gray-500 text-sm">Bedrooms</p>
+                          <p className="font-semibold">{property.bedrooms}</p>
+                        </div>
+                      )}
+                      {property.bathrooms && (
+                        <div className="p-3 bg-gray-50 rounded-lg">
+                          <p className="text-gray-500 text-sm">Bathrooms</p>
+                          <p className="font-semibold">{property.bathrooms}</p>
+                        </div>
+                      )}
+                      {property.year_built && (
+                        <div className="p-3 bg-gray-50 rounded-lg">
+                          <p className="text-gray-500 text-sm">Year Built</p>
+                          <p className="font-semibold">{property.year_built}</p>
+                        </div>
+                      )}
+                      <div className="p-3 bg-gray-50 rounded-lg">
+                        <p className="text-gray-500 text-sm">Total Tokens</p>
+                        <p className="font-semibold">{formatNumber(property.total_tokens || 0)}</p>
                       </div>
-                      <div className="p-3 bg-slate-700/50 rounded-lg">
-                        <p className="text-slate-400 text-sm">Units</p>
-                        <p className="text-white font-semibold">{property.details.units}</p>
-                      </div>
-                      <div className="p-3 bg-slate-700/50 rounded-lg">
-                        <p className="text-slate-400 text-sm">Year Built</p>
-                        <p className="text-white font-semibold">{property.details.yearBuilt}</p>
-                      </div>
-                      <div className="p-3 bg-slate-700/50 rounded-lg">
-                        <p className="text-slate-400 text-sm">Parking Spaces</p>
-                        <p className="text-white font-semibold">{property.details.parkingSpaces}</p>
-                      </div>
-                      <div className="p-3 bg-slate-700/50 rounded-lg">
-                        <p className="text-slate-400 text-sm">Occupancy Rate</p>
-                        <p className="text-white font-semibold">{property.financials.occupancyRate}%</p>
-                      </div>
-                      <div className="p-3 bg-slate-700/50 rounded-lg">
-                        <p className="text-slate-400 text-sm">Monthly Rent</p>
-                        <p className="text-white font-semibold">{formatUSD(property.financials.monthlyRent)}</p>
+                      <div className="p-3 bg-gray-50 rounded-lg">
+                        <p className="text-gray-500 text-sm">Available</p>
+                        <p className="font-semibold">{formatNumber(property.tokens_available || 0)}</p>
                       </div>
                     </div>
 
-                    <div className="mt-6">
-                      <p className="text-slate-400 text-sm mb-3">Amenities</p>
-                      <div className="flex flex-wrap gap-2">
-                        {property.details.amenities.map((amenity) => (
-                          <Badge 
-                            key={amenity} 
-                            variant="outline" 
-                            className="border-slate-600 text-slate-300"
-                          >
-                            {amenity}
-                          </Badge>
-                        ))}
+                    {/* Amenities */}
+                    {property.features && (property.features as string[]).length > 0 && (
+                      <div className="mt-6">
+                        <p className="text-gray-500 text-sm mb-3">Amenities</p>
+                        <div className="flex flex-wrap gap-2">
+                          {(property.features as string[]).map((feature, index) => (
+                            <Badge key={index} variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                              {feature}
+                            </Badge>
+                          ))}
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </CardContent>
                 </Card>
 
-                <Card className="bg-slate-800 border-slate-700">
+                {/* Location */}
+                <Card>
                   <CardHeader>
-                    <CardTitle className="text-white">Location</CardTitle>
+                    <CardTitle>Location</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="aspect-video bg-slate-700 rounded-lg flex items-center justify-center">
-                      <p className="text-slate-400">Map Integration (Google Maps / Mapbox)</p>
+                    <div className="aspect-video bg-gray-100 rounded-lg flex items-center justify-center mb-4">
+                      <div className="text-center text-gray-400">
+                        <MapPin className="w-12 h-12 mx-auto mb-2" />
+                        <p>Map Integration</p>
+                      </div>
                     </div>
-                    <p className="text-slate-300 mt-4">
-                      {property.location.address}<br />
-                      {property.location.city}, {property.location.state} {property.location.zipCode}
+                    <p className="text-gray-600">
+                      {property.street_address && `${property.street_address}, `}
+                      {property.city}, {property.state} {property.postal_code}
+                      {property.country && `, ${property.country}`}
                     </p>
                   </CardContent>
                 </Card>
@@ -287,87 +461,121 @@ export default function PropertyDetailPage() {
             {/* Financials Tab */}
             {activeTab === 'financials' && (
               <div className="space-y-6">
-                <Card className="bg-slate-800 border-slate-700">
+                {/* Investment Metrics */}
+                <Card>
                   <CardHeader>
-                    <CardTitle className="text-white">Investment Metrics</CardTitle>
+                    <CardTitle>Investment Metrics</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div className="text-center p-4 bg-slate-700/50 rounded-lg">
-                        <TrendingUp className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
-                        <p className="text-2xl font-bold text-white">{property.financials.annualYield}%</p>
-                        <p className="text-slate-400 text-sm">Annual Yield</p>
+                      <div className="text-center p-4 bg-green-50 rounded-lg">
+                        <TrendingUp className="w-8 h-8 text-green-600 mx-auto mb-2" />
+                        <p className="text-2xl font-bold text-green-600">{annualYield}%</p>
+                        <p className="text-gray-500 text-sm">Annual Yield</p>
                       </div>
-                      <div className="text-center p-4 bg-slate-700/50 rounded-lg">
-                        <Building2 className="w-8 h-8 text-blue-400 mx-auto mb-2" />
-                        <p className="text-2xl font-bold text-white">{property.financials.capRate}%</p>
-                        <p className="text-slate-400 text-sm">Cap Rate</p>
+                      <div className="text-center p-4 bg-blue-50 rounded-lg">
+                        <Building2 className="w-8 h-8 text-blue-600 mx-auto mb-2" />
+                        <p className="text-2xl font-bold text-blue-600">{property.cap_rate || 5.8}%</p>
+                        <p className="text-gray-500 text-sm">Cap Rate</p>
                       </div>
-                      <div className="text-center p-4 bg-slate-700/50 rounded-lg">
-                        <Users className="w-8 h-8 text-purple-400 mx-auto mb-2" />
-                        <p className="text-2xl font-bold text-white">{property.investorCount}</p>
-                        <p className="text-slate-400 text-sm">Investors</p>
+                      <div className="text-center p-4 bg-purple-50 rounded-lg">
+                        <Users className="w-8 h-8 text-purple-600 mx-auto mb-2" />
+                        <p className="text-2xl font-bold text-purple-600">{investorCount}</p>
+                        <p className="text-gray-500 text-sm">Investors</p>
                       </div>
-                      <div className="text-center p-4 bg-slate-700/50 rounded-lg">
-                        <DollarSign className="w-8 h-8 text-yellow-400 mx-auto mb-2" />
-                        <p className="text-2xl font-bold text-white">{formatUSD(property.financials.monthlyRent)}</p>
-                        <p className="text-slate-400 text-sm">Monthly Revenue</p>
+                      <div className="text-center p-4 bg-yellow-50 rounded-lg">
+                        <DollarSign className="w-8 h-8 text-yellow-600 mx-auto mb-2" />
+                        <p className="text-2xl font-bold text-yellow-600">
+                          {formatCurrency(property.annual_rent_income ? property.annual_rent_income / 12 : 85000)}
+                        </p>
+                        <p className="text-gray-500 text-sm">Monthly Revenue</p>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
 
-                <Card className="bg-slate-800 border-slate-700">
+                {/* Revenue Projection */}
+                <Card>
                   <CardHeader>
-                    <CardTitle className="text-white">Revenue Projection</CardTitle>
-                    <CardDescription className="text-slate-400">
+                    <CardTitle>Revenue Projection</CardTitle>
+                    <CardDescription>
                       Estimated returns based on current performance
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-4">
-                      <div className="flex justify-between p-3 bg-slate-700/50 rounded-lg">
-                        <span className="text-slate-300">Per Share (Annual)</span>
-                        <span className="text-white font-semibold">
-                          {formatUSD(property.financials.pricePerShare * (property.financials.annualYield / 100))}
+                    <div className="space-y-3">
+                      <div className="flex justify-between p-4 bg-gray-50 rounded-lg">
+                        <span className="text-gray-600">Per Share (Annual)</span>
+                        <span className="font-semibold">
+                          {formatCurrency(pricePerShare * (annualYield / 100))}
                         </span>
                       </div>
-                      <div className="flex justify-between p-3 bg-slate-700/50 rounded-lg">
-                        <span className="text-slate-300">10 Shares (Annual)</span>
-                        <span className="text-white font-semibold">
-                          {formatUSD(10 * property.financials.pricePerShare * (property.financials.annualYield / 100))}
+                      <div className="flex justify-between p-4 bg-gray-50 rounded-lg">
+                        <span className="text-gray-600">10 Shares (Annual)</span>
+                        <span className="font-semibold">
+                          {formatCurrency(10 * pricePerShare * (annualYield / 100))}
                         </span>
                       </div>
-                      <div className="flex justify-between p-3 bg-slate-700/50 rounded-lg">
-                        <span className="text-slate-300">100 Shares (Annual)</span>
-                        <span className="text-white font-semibold">
-                          {formatUSD(100 * property.financials.pricePerShare * (property.financials.annualYield / 100))}
+                      <div className="flex justify-between p-4 bg-gray-50 rounded-lg">
+                        <span className="text-gray-600">100 Shares (Annual)</span>
+                        <span className="font-semibold">
+                          {formatCurrency(100 * pricePerShare * (annualYield / 100))}
                         </span>
                       </div>
                     </div>
-                    <p className="text-slate-500 text-sm mt-4">
+                    <p className="text-gray-400 text-sm mt-4">
                       * Projections based on historical performance. Past returns do not guarantee future results.
                     </p>
                   </CardContent>
                 </Card>
 
-                <Card className="bg-slate-800 border-slate-700">
+                {/* Fee Structure */}
+                <Card>
                   <CardHeader>
-                    <CardTitle className="text-white">Fee Structure</CardTitle>
+                    <CardTitle>Fee Structure</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-3">
-                      <div className="flex justify-between">
-                        <span className="text-slate-300">Platform Fee</span>
-                        <span className="text-white">{property.financials.platformFee}%</span>
+                      <div className="flex justify-between py-2 border-b">
+                        <span className="text-gray-600">Platform Fee</span>
+                        <span className="font-medium">{PLATFORM_FEE_PERCENT}%</span>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-300">Management Fee</span>
-                        <span className="text-white">1.0% annually</span>
+                      <div className="flex justify-between py-2 border-b">
+                        <span className="text-gray-600">Management Fee</span>
+                        <span className="font-medium">{property.management_fee_percent || 1.0}% annually</span>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-300">Exit Fee</span>
-                        <span className="text-white">0.5%</span>
+                      <div className="flex justify-between py-2">
+                        <span className="text-gray-600">Exit Fee</span>
+                        <span className="font-medium">0.5%</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Financial Details */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Financial Details</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="p-4 bg-gray-50 rounded-lg">
+                        <p className="text-gray-500 text-sm">Total Valuation</p>
+                        <p className="text-xl font-semibold">{formatCurrency(property.total_valuation)}</p>
+                      </div>
+                      {property.annual_rent_income && (
+                        <div className="p-4 bg-gray-50 rounded-lg">
+                          <p className="text-gray-500 text-sm">Annual Rent Income</p>
+                          <p className="text-xl font-semibold">{formatCurrency(property.annual_rent_income)}</p>
+                        </div>
+                      )}
+                      <div className="p-4 bg-gray-50 rounded-lg">
+                        <p className="text-gray-500 text-sm">Min Investment</p>
+                        <p className="text-xl font-semibold">{formatCurrency(property.minimum_investment || pricePerShare)}</p>
+                      </div>
+                      <div className="p-4 bg-gray-50 rounded-lg">
+                        <p className="text-gray-500 text-sm">Token Price</p>
+                        <p className="text-xl font-semibold">{formatCurrency(pricePerShare)}</p>
                       </div>
                     </div>
                   </CardContent>
@@ -377,28 +585,30 @@ export default function PropertyDetailPage() {
 
             {/* Documents Tab */}
             {activeTab === 'documents' && (
-              <Card className="bg-slate-800 border-slate-700">
+              <Card>
                 <CardHeader>
-                  <CardTitle className="text-white">Property Documents</CardTitle>
-                  <CardDescription className="text-slate-400">
+                  <CardTitle>Property Documents</CardTitle>
+                  <CardDescription>
                     Review all legal and financial documents before investing
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {property.documents.map((doc, index) => (
+                    {documents.map((doc, index) => (
                       <div 
                         key={index}
-                        className="flex items-center justify-between p-4 bg-slate-700/50 rounded-lg hover:bg-slate-700 transition-colors"
+                        className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
                       >
                         <div className="flex items-center gap-3">
-                          <FileText className="w-8 h-8 text-blue-400" />
+                          <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                            <FileText className="w-5 h-5 text-blue-600" />
+                          </div>
                           <div>
-                            <p className="text-white font-medium">{doc.name}</p>
-                            <p className="text-slate-400 text-sm">{doc.type} • {doc.size}</p>
+                            <p className="font-medium">{doc.name}</p>
+                            <p className="text-gray-500 text-sm">{doc.type} • {doc.size}</p>
                           </div>
                         </div>
-                        <Button variant="outline" size="sm" className="border-slate-600">
+                        <Button variant="outline" size="sm">
                           <ExternalLink className="w-4 h-4 mr-2" />
                           View
                         </Button>
@@ -412,84 +622,30 @@ export default function PropertyDetailPage() {
             {/* Governance Tab */}
             {activeTab === 'governance' && (
               <div className="space-y-6">
-                <Card className="bg-slate-800 border-slate-700">
+                <GovernanceProposals property={property} />
+                
+                {/* Governance Rights */}
+                <Card>
                   <CardHeader>
-                    <CardTitle className="text-white flex items-center gap-2">
-                      <Vote className="w-5 h-5" />
-                      Active Proposals
-                    </CardTitle>
-                    <CardDescription className="text-slate-400">
-                      Vote on property decisions as a token holder
-                    </CardDescription>
+                    <CardTitle>Governance Rights</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-4">
-                      {property.recentProposals.map((proposal) => (
-                        <div 
-                          key={proposal.id}
-                          className="p-4 bg-slate-700/50 rounded-lg"
-                        >
-                          <div className="flex items-start justify-between mb-3">
-                            <div>
-                              <p className="text-white font-medium">{proposal.title}</p>
-                              <Badge 
-                                className={
-                                  proposal.status === 'Active' 
-                                    ? 'bg-blue-500/20 text-blue-400 border-blue-500/30'
-                                    : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                                }
-                              >
-                                {proposal.status}
-                              </Badge>
-                            </div>
-                            {proposal.status === 'Active' && (
-                              <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
-                                Vote Now
-                              </Button>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-4">
-                            <div className="flex-1">
-                              <div className="flex justify-between text-sm mb-1">
-                                <span className="text-emerald-400">For: {proposal.votes.for}%</span>
-                                <span className="text-red-400">Against: {proposal.votes.against}%</span>
-                              </div>
-                              <Progress value={proposal.votes.for} className="h-2" />
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <Link href="/governance">
-                      <Button variant="outline" className="w-full mt-4 border-slate-600">
-                        View All Proposals
-                        <ChevronRight className="w-4 h-4 ml-2" />
-                      </Button>
-                    </Link>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-slate-800 border-slate-700">
-                  <CardHeader>
-                    <CardTitle className="text-white">Governance Rights</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3 text-slate-300">
+                    <div className="space-y-3">
                       <div className="flex items-start gap-3">
-                        <CheckCircle2 className="w-5 h-5 text-emerald-400 mt-0.5" />
-                        <p>1 share = 1 vote on all property decisions</p>
+                        <CheckCircle2 className="w-5 h-5 text-green-500 mt-0.5" />
+                        <p className="text-gray-600">1 share = 1 vote on all property decisions</p>
                       </div>
                       <div className="flex items-start gap-3">
-                        <CheckCircle2 className="w-5 h-5 text-emerald-400 mt-0.5" />
-                        <p>Proposals require 25% quorum to pass</p>
+                        <CheckCircle2 className="w-5 h-5 text-green-500 mt-0.5" />
+                        <p className="text-gray-600">Proposals require 25% quorum to pass</p>
                       </div>
                       <div className="flex items-start gap-3">
-                        <CheckCircle2 className="w-5 h-5 text-emerald-400 mt-0.5" />
-                        <p>7-day voting period for standard proposals</p>
+                        <CheckCircle2 className="w-5 h-5 text-green-500 mt-0.5" />
+                        <p className="text-gray-600">7-day voting period for standard proposals</p>
                       </div>
                       <div className="flex items-start gap-3">
-                        <CheckCircle2 className="w-5 h-5 text-emerald-400 mt-0.5" />
-                        <p>Vote on renovations, management, and distributions</p>
+                        <CheckCircle2 className="w-5 h-5 text-green-500 mt-0.5" />
+                        <p className="text-gray-600">Vote on renovations, management, and distributions</p>
                       </div>
                     </div>
                   </CardContent>
@@ -498,13 +654,13 @@ export default function PropertyDetailPage() {
             )}
           </div>
 
-          {/* Sidebar - Investment Panel */}
+          {/* Right Column - Investment Panel */}
           <div className="space-y-6">
             {/* Investment Card */}
-            <Card className="bg-slate-800 border-slate-700 sticky top-4">
+            <Card className="sticky top-4">
               <CardHeader>
-                <CardTitle className="text-white">Invest in This Property</CardTitle>
-                <CardDescription className="text-slate-400">
+                <CardTitle>Invest in This Property</CardTitle>
+                <CardDescription>
                   Purchase fractional ownership shares
                 </CardDescription>
               </CardHeader>
@@ -512,102 +668,121 @@ export default function PropertyDetailPage() {
                 {/* Funding Progress */}
                 <div>
                   <div className="flex justify-between text-sm mb-2">
-                    <span className="text-slate-400">Funding Progress</span>
-                    <span className="text-white font-medium">{property.financials.fundingProgress}%</span>
+                    <span className="text-gray-500">Funding Progress</span>
+                    <span className="font-medium">{soldPercentage.toFixed(1)}%</span>
                   </div>
-                  <Progress value={property.financials.fundingProgress} className="h-3" />
+                  <Progress value={soldPercentage} className="h-3" />
                   <div className="flex justify-between text-sm mt-2">
-                    <span className="text-slate-400">
-                      {formatUSD((property.financials.totalShares - property.financials.sharesAvailable) * property.financials.pricePerShare)} raised
+                    <span className="text-gray-500">
+                      {formatCurrency((property.total_tokens! - property.tokens_available!) * pricePerShare)} raised
                     </span>
-                    <span className="text-slate-400">
-                      {formatUSD(property.financials.totalValue)} goal
+                    <span className="text-gray-500">
+                      {formatCurrency(property.total_valuation)} goal
                     </span>
                   </div>
                 </div>
 
                 {/* Key Stats */}
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="p-3 bg-slate-700/50 rounded-lg text-center">
-                    <p className="text-2xl font-bold text-emerald-400">{property.financials.annualYield}%</p>
-                    <p className="text-slate-400 text-sm">Est. Annual Yield</p>
+                  <div className="p-3 bg-green-50 rounded-lg text-center">
+                    <p className="text-2xl font-bold text-green-600">{annualYield}%</p>
+                    <p className="text-gray-500 text-sm">Est. Annual Yield</p>
                   </div>
-                  <div className="p-3 bg-slate-700/50 rounded-lg text-center">
-                    <p className="text-2xl font-bold text-white">{formatUSD(property.financials.pricePerShare)}</p>
-                    <p className="text-slate-400 text-sm">Per Share</p>
+                  <div className="p-3 bg-blue-50 rounded-lg text-center">
+                    <p className="text-2xl font-bold text-blue-600">{formatCurrency(pricePerShare)}</p>
+                    <p className="text-gray-500 text-sm">Per Share</p>
                   </div>
                 </div>
 
                 {/* Shares Available */}
-                <div className="flex items-center justify-between p-3 bg-slate-700/30 rounded-lg">
-                  <span className="text-slate-400">Shares Available</span>
-                  <span className="text-white font-semibold">
-                    {property.financials.sharesAvailable.toLocaleString()} / {property.financials.totalShares.toLocaleString()}
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <span className="text-gray-500">Shares Available</span>
+                  <span className="font-semibold">
+                    {formatNumber(sharesAvailable)} / {formatNumber(property.total_tokens || 0)}
                   </span>
                 </div>
 
+                {/* User Holding */}
+                {userHolding && (
+                  <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <p className="text-sm text-blue-600 font-medium mb-1">Your Investment</p>
+                    <div className="flex justify-between items-center">
+                      <span className="text-lg font-semibold">
+                        {formatNumber(userHolding.token_balance)} shares
+                      </span>
+                      <span className="text-gray-600">
+                        ({(userHolding.ownership_percentage || 0).toFixed(4)}% ownership)
+                      </span>
+                    </div>
+                  </div>
+                )}
+
                 {/* Investment Input */}
                 <div>
-                  <label className="text-slate-400 text-sm mb-2 block">Number of Shares</label>
+                  <label className="text-gray-500 text-sm mb-2 block">Number of Shares</label>
                   <Input
                     type="number"
                     placeholder="Enter shares to buy"
                     value={sharesToBuy}
                     onChange={(e) => setSharesToBuy(e.target.value)}
                     min="1"
-                    max={property.financials.sharesAvailable}
-                    className="bg-slate-700 border-slate-600 text-white"
+                    max={sharesAvailable}
+                    className="text-lg"
                   />
                 </div>
 
                 {/* Cost Breakdown */}
                 {shareAmount > 0 && (
-                  <div className="space-y-2 p-3 bg-slate-700/30 rounded-lg">
+                  <div className="space-y-2 p-4 bg-gray-50 rounded-lg">
                     <div className="flex justify-between text-sm">
-                      <span className="text-slate-400">Shares ({shareAmount})</span>
-                      <span className="text-white">{formatUSD(totalCost)}</span>
+                      <span className="text-gray-500">Shares ({shareAmount})</span>
+                      <span>{formatCurrency(totalCost)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-slate-400">Platform Fee ({property.financials.platformFee}%)</span>
-                      <span className="text-white">{formatUSD(platformFee)}</span>
+                      <span className="text-gray-500">Platform Fee ({PLATFORM_FEE_PERCENT}%)</span>
+                      <span>{formatCurrency(platformFee)}</span>
                     </div>
-                    <div className="border-t border-slate-600 pt-2 flex justify-between">
-                      <span className="text-white font-medium">Total</span>
-                      <span className="text-white font-bold">{formatUSD(totalWithFee)}</span>
+                    <div className="border-t pt-2 flex justify-between font-semibold">
+                      <span>Total</span>
+                      <span className="text-blue-600">{formatCurrency(totalWithFee)}</span>
                     </div>
                   </div>
                 )}
 
                 {/* Invest Button */}
                 <Button 
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                  className="w-full bg-blue-600 hover:bg-blue-700"
                   size="lg"
-                  onClick={handleInvest}
-                  disabled={isInvesting || shareAmount <= 0}
+                  onClick={handleQuickInvest}
+                  disabled={isInvesting || shareAmount <= 0 || !isConnected}
                 >
                   {isInvesting ? (
                     <>Processing...</>
+                  ) : !isConnected ? (
+                    <>Connect Wallet to Invest</>
                   ) : (
                     <>
                       <Wallet className="w-5 h-5 mr-2" />
-                      {shareAmount > 0 ? `Invest ${formatUSD(totalWithFee)}` : 'Enter Amount to Invest'}
+                      {shareAmount > 0 ? `Invest ${formatCurrency(totalWithFee)}` : 'Enter Amount'}
                     </>
                   )}
                 </Button>
 
-                {/* Deadline */}
-                <div className="flex items-center gap-2 text-sm text-slate-400">
-                  <Clock className="w-4 h-4" />
-                  <span>Funding deadline: {new Date(property.timeline.fundingDeadline).toLocaleDateString()}</span>
-                </div>
+                {/* Timeline */}
+                {property.offering_end && (
+                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                    <Clock className="w-4 h-4" />
+                    <span>Funding deadline: {new Date(property.offering_end).toLocaleDateString()}</span>
+                  </div>
+                )}
 
                 {/* Compliance Notice */}
-                <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-                  <div className="flex items-start gap-2">
-                    <Shield className="w-5 h-5 text-blue-400 mt-0.5" />
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-start gap-3">
+                    <Shield className="w-5 h-5 text-blue-600 mt-0.5" />
                     <div className="text-sm">
-                      <p className="text-blue-400 font-medium">SEC Compliant</p>
-                      <p className="text-slate-400">
+                      <p className="text-blue-700 font-medium">SEC Compliant</p>
+                      <p className="text-gray-600">
                         This offering is compliant with Regulation D/A+ securities requirements.
                       </p>
                     </div>
@@ -616,22 +791,73 @@ export default function PropertyDetailPage() {
               </CardContent>
             </Card>
 
-            {/* Quick Stats */}
-            <Card className="bg-slate-800 border-slate-700">
-              <CardContent className="p-4">
+            {/* Contract Info */}
+            <Card>
+              <CardContent className="pt-6">
                 <div className="space-y-3">
+                  {property.token_address && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500 text-sm">Contract</span>
+                      <a 
+                        href={`https://sepolia.etherscan.io/address/${property.token_address}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 text-sm font-mono hover:underline"
+                      >
+                        {property.token_address.slice(0, 6)}...{property.token_address.slice(-4)}
+                      </a>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-400 text-sm">Contract</span>
-                    <span className="text-blue-400 text-sm font-mono">{property.contractAddress}</span>
+                    <span className="text-gray-500 text-sm">Network</span>
+                    <Badge variant="outline">Sepolia</Badge>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-400 text-sm">Network</span>
-                    <Badge variant="outline" className="border-slate-600">Sepolia</Badge>
+                    <span className="text-gray-500 text-sm">Token Standard</span>
+                    <span className="text-sm">ERC-1155</span>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-400 text-sm">Token Standard</span>
-                    <span className="text-white text-sm">ERC-1155</span>
+                  {property.property_id && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500 text-sm">Property ID</span>
+                      <span className="text-sm font-mono">{property.property_id}</span>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Timeline Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Timeline</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3 text-sm">
+                  <div className="flex items-center gap-3">
+                    <Calendar className="w-4 h-4 text-gray-400" />
+                    <div className="flex-1">
+                      <p className="text-gray-500">Listed</p>
+                      <p className="font-medium">{new Date(property.created_at).toLocaleDateString()}</p>
+                    </div>
                   </div>
+                  {property.offering_start && (
+                    <div className="flex items-center gap-3">
+                      <Calendar className="w-4 h-4 text-gray-400" />
+                      <div className="flex-1">
+                        <p className="text-gray-500">Offering Start</p>
+                        <p className="font-medium">{new Date(property.offering_start).toLocaleDateString()}</p>
+                      </div>
+                    </div>
+                  )}
+                  {property.offering_end && (
+                    <div className="flex items-center gap-3">
+                      <Calendar className="w-4 h-4 text-gray-400" />
+                      <div className="flex-1">
+                        <p className="text-gray-500">Offering End</p>
+                        <p className="font-medium">{new Date(property.offering_end).toLocaleDateString()}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>

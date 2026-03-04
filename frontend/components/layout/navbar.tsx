@@ -1,17 +1,24 @@
+// frontend/components/layout/navbar.tsx
+// ============================================================================
+// NAVIGATION BAR
+// Main navigation component with responsive mobile menu
+// ============================================================================
+
 "use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAccount } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { Building2, Menu, X } from "lucide-react";
+import { Building2, Menu, X, Home } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const navigation = [
-  { name: "Properties", href: "/properties" },
-  { name: "Governance", href: "/governance" },
+  { name: "Home", href: "/", protected: false },
+  { name: "Properties", href: "/properties", protected: false },
+  { name: "Governance", href: "/governance", protected: false },
   { name: "Dashboard", href: "/dashboard", protected: true },
   { name: "Investments", href: "/investments", protected: true },
   { name: "Profile", href: "/profile", protected: true },

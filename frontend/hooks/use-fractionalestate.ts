@@ -1,11 +1,11 @@
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { parseEther, formatEther } from "viem";
-import { FRACTIONALESTATE_ABI, FRACTIONALESTATE_ADDRESS } from "@/lib/contracts";
+import { FRACTIONALESTATE_ABI, CONTRACT_ADDRESSES} from "@/lib/contracts";
 
 // Hook to get property details
 export function useProperty(propertyId: number) {
   const { data, isLoading, error, refetch } = useReadContract({
-    address: FRACTIONALESTATE_ADDRESS,
+    address: CONTRACT_ADDRESSES.FRACTIONAL_ESTATE,
     abi: FRACTIONALESTATE_ABI,
     functionName: "getProperty",
     args: [BigInt(propertyId)],
@@ -22,7 +22,7 @@ export function useProperty(propertyId: number) {
 // Hook to get investor details
 export function useInvestor(address: `0x${string}` | undefined) {
   const { data, isLoading, error, refetch } = useReadContract({
-    address: FRACTIONALESTATE_ADDRESS,
+    address: CONTRACT_ADDRESSES.FRACTIONAL_ESTATE,
     abi: FRACTIONALESTATE_ABI,
     functionName: "getInvestor",
     args: address ? [address] : undefined,
@@ -42,7 +42,7 @@ export function useInvestor(address: `0x${string}` | undefined) {
 // Hook to get share balance
 export function useShareBalance(investor: `0x${string}` | undefined, propertyId: number) {
   const { data, isLoading, error, refetch } = useReadContract({
-    address: FRACTIONALESTATE_ADDRESS,
+    address: CONTRACT_ADDRESSES.FRACTIONAL_ESTATE,
     abi: FRACTIONALESTATE_ABI,
     functionName: "getShareBalance",
     args: investor ? [investor, BigInt(propertyId)] : undefined,
@@ -62,7 +62,7 @@ export function useShareBalance(investor: `0x${string}` | undefined, propertyId:
 // Hook to get claimable dividends
 export function useClaimableDividends(propertyId: number, investor: `0x${string}` | undefined) {
   const { data, isLoading, error, refetch } = useReadContract({
-    address: FRACTIONALESTATE_ADDRESS,
+    address: CONTRACT_ADDRESSES.FRACTIONAL_ESTATE,
     abi: FRACTIONALESTATE_ABI,
     functionName: "getClaimableDividends",
     args: investor ? [BigInt(propertyId), investor] : undefined,
@@ -91,7 +91,7 @@ export function usePurchaseShares() {
     const totalCost = parseEther(pricePerShare) * BigInt(shares);
     
     writeContract({
-      address: FRACTIONALESTATE_ADDRESS,
+      address: CONTRACT_ADDRESSES.FRACTIONAL_ESTATE,
       abi: FRACTIONALESTATE_ABI,
       functionName: "purchaseShares",
       args: [BigInt(propertyId), BigInt(shares)],
@@ -119,7 +119,7 @@ export function useClaimDividends() {
 
   const claimDividends = async (propertyId: number) => {
     writeContract({
-      address: FRACTIONALESTATE_ADDRESS,
+      address: CONTRACT_ADDRESSES.FRACTIONAL_ESTATE,
       abi: FRACTIONALESTATE_ABI,
       functionName: "claimDividends",
       args: [BigInt(propertyId)],
@@ -139,7 +139,7 @@ export function useClaimDividends() {
 // Hook to get total properties
 export function useTotalProperties() {
   const { data, isLoading, error } = useReadContract({
-    address: FRACTIONALESTATE_ADDRESS,
+    address: CONTRACT_ADDRESSES.FRACTIONAL_ESTATE,
     abi: FRACTIONALESTATE_ABI,
     functionName: "getTotalProperties",
   });
@@ -154,7 +154,7 @@ export function useTotalProperties() {
 // Hook to get investor properties
 export function useInvestorProperties(investor: `0x${string}` | undefined) {
   const { data, isLoading, error, refetch } = useReadContract({
-    address: FRACTIONALESTATE_ADDRESS,
+    address: CONTRACT_ADDRESSES.FRACTIONAL_ESTATE,
     abi: FRACTIONALESTATE_ABI,
     functionName: "getInvestorProperties",
     args: investor ? [investor] : undefined,

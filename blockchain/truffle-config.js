@@ -50,6 +50,8 @@ module.exports = {
       }
     }
   },
+
+  
   plugins: ['truffle-plugin-verify'],
   api_keys: { etherscan: ETHERSCAN_API_KEY },
   mocha: { timeout: 100000 },

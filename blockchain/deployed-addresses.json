@@ -1,12 +1,12 @@
 {
   "network": "development",
-  "deployedAt": "2026-02-27T05:15:14.913Z",
+  "deployedAt": "2026-03-04T07:34:45.714Z",
   "contracts": {
-    "FractionalEstate": "0x22e2C748e23e9d571F05B66ad4b4dF32BDC30EF5",
-    "PropertyGovernance": "0xBE0FBB857e3aD8A975ABD721A16449b19b7997F0"
+    "FractionalEstate": "0x6a458A96A127f3b38C1540ffdaC29d9537870A03",
+    "PropertyGovernance": "0x60333b6f1452Df4b22Da8fE5d79c7Db687d6e03E"
   },
   "config": {
-    "treasury": "0xb3afdA870f9f1ddd3ae16f287AB3842C5f9FA109",
+    "treasury": "0x1EFE7B200FFA11D617490b92906F013A5B4dE96B",
     "minimumInvestment": "1000000000000000",
     "metadataURI": "https://ipfs.io/ipfs/YOUR_METADATA_CID/{id}.json"
   }
