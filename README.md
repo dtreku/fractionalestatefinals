@@ -1,5 +1,5 @@
 # fractionalestatefinals
-A test final project for business applications blockchain technology class
+A test final project for the business applications blockchain technology class
 # FractionalEstate - PropTech Real Estate Tokenization Platform -
 --------------------------------------------------------------------------------------------------------------------------------------
 OVERVIEW. AFTER READING THROUGH GO TO LINE 220 FOR DEVELOPMENT INSTRUCTIONS
