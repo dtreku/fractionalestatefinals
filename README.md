@@ -1303,13 +1303,12 @@ npx tsc --noEmit
 
 ### Step 4.6: Update Files in your project
 
-
 ### Update the contracts.ts frontend/lib/contracts.ts
-### Update the supabase.ts frontend/libsupabase.ts  
-### Update the utils.ts file in the frontend/lib/utils.ts.
-### Update the frontend/tsconfig.json file in the frontend/lib with the script provided.
-### Update frontend/components/Investment/InvestmentForm
-### Update the frontend/hooks/use-fractionalestate.ts 
+### Update the supabase.ts frontend/lib/supabase.ts  
+### Update the utils.ts file in the frontend/lib/utils.ts
+### Update the tsconfig.json frontend/tsconfig.json 
+### Update InvestmentForm.tsx frontend/components/Investment/InvestmentForm.tsx
+### Update use-fractionalestate.ts. frontend/hooks/use-fractionalestate.ts 
 ### Update page.tsx frontend/app/pag.tsx
 ### Update page.tsx frontend/app/profile/page.tsx
 ### Update page.tsx frontend/app/properties/page.tsx
