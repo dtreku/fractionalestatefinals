@@ -3,11 +3,8 @@ A test final project for the business applications blockchain technology class
 # FractionalEstate - PropTech Real Estate Tokenization Platform -
 --------------------------------------------------------------------------------------------------------------------------------------
 OVERVIEW. AFTER READING THROUGH GO TO LINE 220 FOR DEVELOPMENT INSTRUCTIONS
-GET YOUR GROUP MEMBERS TO HAVE AS MUCH SEPOLIA FUNDS. THE FUNDS WILL BE TRANSFERRED TO THE PROJECT LEAD. 
-AT LEAST 1.5 SEPOLIA ETH needed to deploy on sepolia network. Before then the instructions will guide you how to deploy and test on local network called ganache
-I HAVE MADE THIS COMPREHENSIVE DOCUMENT TO HELP YOUR BLOCKCHAIN JOURNEY BEYOND THE CLASS. 
-THANK YOU AND SEE YOU IN OUR FINAL PROJECT DEVELOPMENT CLASS!
-PROF TREKU
+GET YOUR GROUP MEMBERS TO HAVE AS MUCH SEPOLIA FUNDS IF DEPLOYING WITH SEPOLIA. AT LEAST 1.5 SEPOLIA ETH NEEDED TO DEPLOY ON THE SEPOLIA NETWORK. WE WILL ALSO DEPLOY ON  A LOCAL TESTNET, GANACHE.
+I HAVE MADE THIS COMPREHENSIVE DOCUMENT TO HELP YOUR BLOCKCHAIN JOURNEY BEYOND THE CLASS. THANK YOU
 --------------------------------------------------------------------------------------------------------------------------------------
 
 <div align="center">
@@ -219,8 +216,9 @@ ganache -v
 ```
 
 
-*** TWO PLACES TO START YOUR CAPSTONE PROJECT DEVELOPMENT: EITHER FROM   "QUICK START"  OR   "STUDENT IMPLEMENTATION GUDE" (Line 820)
-IN EACH, CASE YOU TWO OPTIONS ***
+
+*** TWO PLACES TO START, EITHER THE QUICK START (LINE 240) OR THE STUDENT IMPLEMENTATION GUIDE (Line 820). 
+I RECOMMEND THE  "STUDENT IMPLEMENTATION GUIDE" ***
 -------------------------------------------------------------------------------------------------------------------------------
 Option A: Local Demo Only (No Sepolia ETH Needed)
 Run everything locally for demonstration:
@@ -235,6 +233,7 @@ Show demo on your computer only.         | Ganache + localhost
 Avoid getting Sepolia ETH.               | Ganache + localhost (limited and blockchain sits on only your personal computer)
 Submit final work capstone for grading   | Sepolia + Vercel   (I am flexible if the group runs out of sepolia eth)
 Let others test your app globally        | Sepolia + Vercel
+
 
 -------------------------------------------------------------------------------------------------------------------------------
 -------------------------------------------------------------------------------------------------------------------------------
